@@ -18,6 +18,7 @@ module.exports = class CocoRouter extends Backbone.Router
 
     # Experimenting with direct links
 #    'play/ladder/:levelID/team/:team': go('play/ladder/team_view')
+    'test/(:subpath)': go('test')
 
     # db and file urls call the server directly
     'db/*path': 'routeToServer'
