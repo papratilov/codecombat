@@ -9,7 +9,7 @@ module.exports = class ProfileView extends View
 
   events:
     'click #toggle-job-profile-approved': 'toggleJobProfileApproved'
-    'keyup #job-profile-notes': 'onJobProfileNotesChanged'
+    'click save-notes-button': 'onJobProfileNotesChanged'
     'click #contact-candidate': 'onContactCandidate'
     'click #enter-espionage-mode': 'enterEspionageMode'
 
@@ -18,13 +18,16 @@ module.exports = class ProfileView extends View
     super options
     if @userID is me.id
       @user = me
-    else
+    else if me.isAdmin() or "employer" in me.get('permissions')
       @user = User.getByID(@userID)
-      @addResourceToLoad @user, 'user_profile'
+      @user.fetch()
+      @listenTo @user, "sync", =>
+        @render()
 
   getRenderData: ->
     context = super()
     context.user = @user
+    context.allowedToViewJobProfile = me.isAdmin() or "employer" in me.get('permissions')
     context.myProfile = @user.id is context.me.id
     context.marked = marked
     context.moment = moment

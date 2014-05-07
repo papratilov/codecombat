@@ -96,11 +96,8 @@ module.exports = class SpriteBoss extends CocoClass
     unless @indieSprites
       @indieSprites = []
       @indieSprites = (@createIndieSprite indieSprite for indieSprite in indieSprites) if indieSprites
-    unless @selfWizardSprite
+    if withWizards and not @selfWizardSprite
       @selfWizardSprite = @createWizardSprite thangID: "My Wizard", isSelf: true, sprites: @sprites
-    unless withWizards
-      @selfWizardSprite.displayObject.visible = false
-      @selfWizardSprite.labels.name.setText null
 
   createIndieSprite: (indieSprite) ->
     unless thangType = @thangTypeFor indieSprite.thangType
@@ -224,12 +221,12 @@ module.exports = class SpriteBoss extends CocoClass
   onCastSpells: -> @stop()
 
   play: ->
-    sprite.imageObject.play() for sprite in @spriteArray
+    sprite.play() for sprite in @spriteArray
     @selectionMark?.play()
     @targetMark?.play()
 
   stop: ->
-    sprite.imageObject.stop() for sprite in @spriteArray
+    sprite.stop() for sprite in @spriteArray
     @selectionMark?.stop()
     @targetMark?.stop()
 

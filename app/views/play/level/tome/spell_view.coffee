@@ -97,8 +97,12 @@ module.exports = class SpellView extends View
       aceCommands.push c.name
     addCommand
       name: 'run-code'
-      bindKey: {win: 'Shift-Enter|Ctrl-Enter|Ctrl-S', mac: 'Shift-Enter|Command-Enter|Ctrl-Enter|Command-S|Ctrl-S'}
+      bindKey: {win: 'Shift-Enter|Ctrl-Enter', mac: 'Shift-Enter|Command-Enter|Ctrl-Enter'}
       exec: -> Backbone.Mediator.publish 'tome:manual-cast', {}
+    addCommand
+      name: 'no-op'
+      bindKey: {win: 'Ctrl-S', mac: 'Command-S|Ctrl-S'}
+      exec: ->  # just prevent page save call
     addCommand
       name: 'toggle-playing'
       bindKey: {win: 'Ctrl-P', mac: 'Command-P|Ctrl-P'}
@@ -189,7 +193,7 @@ module.exports = class SpellView extends View
     @createToolbarView()
 
   createDebugView: ->
-    @debugView = new SpellDebugView ace: @ace, thang: @thang
+    @debugView = new SpellDebugView ace: @ace, thang: @thang, spell:@spell
     @$el.append @debugView.render().$el.hide()
 
   createToolbarView: ->
@@ -324,7 +328,7 @@ module.exports = class SpellView extends View
       needsUpdate = codeHasChangedSignificantly or @spellThang isnt @lastUpdatedAetherSpellThang
       return if not needsUpdate and aether is @displayedAether
       castAether = @spellThang.castAether
-      codeIsAsCast = castAether and not hasChanged
+      codeIsAsCast = castAether and source is castAether.raw
       aether = castAether if codeIsAsCast
       return if not needsUpdate and aether is @displayedAether
 
@@ -345,14 +349,13 @@ module.exports = class SpellView extends View
         @worker.addEventListener "message", (e) =>
           workerData = JSON.parse e.data
           if workerData.function is "transpile" and workerData.spellKey is @spell.spellKey
-            @worker.removeEventListener("message",arguments.callee, false)
+            @worker.removeEventListener "message", arguments.callee, false
             aether.problems = workerData.problems
             aether.raw = source
             finishUpdatingAether(aether)
         @worker.postMessage JSON.stringify(workerMessage)
       else
         finishUpdatingAether(aether)
-
 
   clearAetherDisplay: ->
     problem.destroy() for problem in @problems
@@ -384,7 +387,7 @@ module.exports = class SpellView extends View
 
   # Autocast:
   # Goes immediately if the code is a) changed and b) complete/valid and c) the cursor is at beginning or end of a line
-  # We originall thought it would:
+  # We originally thought it would:
   # - Go after specified delay if a) and b) but not c)
   # - Go only when manually cast or deselecting a Thang when there are errors
   # But the error message display was delayed, so now trying:

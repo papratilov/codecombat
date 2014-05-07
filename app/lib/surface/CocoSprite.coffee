@@ -168,17 +168,20 @@ module.exports = CocoSprite = class CocoSprite extends CocoClass
   stop: ->
     @imageObject?.stop?()
     mark.stop() for name, mark of @marks
+    @stopped = true
 
   play: ->
     @imageObject?.play?()
     mark.play() for name, mark of @marks
+    @stopped = false
 
   update: (frameChanged) ->
     # Gets the sprite to reflect what the current state of the thangs and surface are
     return if @stillLoading
     @updatePosition()
+    frameChanged = frameChanged or @targetScaleFactor isnt @scaleFactor
     if frameChanged
-      @updateScale() # must happen before rotation
+      @updateScale()  # must happen before rotation
       @updateAlpha()
       @updateRotation()
       @updateAction()
@@ -221,7 +224,8 @@ module.exports = CocoSprite = class CocoSprite extends CocoClass
 
   getBobOffset: ->
     return 0 unless @thang.bobHeight
-    @thang.bobHeight * (1 + Math.sin(@age * Math.PI / @thang.bobTime))
+    return @lastBobOffset if @stopped
+    return @lastBobOffset = @thang.bobHeight * (1 + Math.sin(@age * Math.PI / @thang.bobTime))
 
   getWorldPosition: ->
     p1 = if @possessed then @shadow.pos else @thang.pos
@@ -274,7 +278,7 @@ module.exports = CocoSprite = class CocoSprite extends CocoClass
     if (@thang.scaleFactor or 1) isnt @targetScaleFactor
       createjs.Tween.removeTweens(@)
       createjs.Tween.get(@).to({scaleFactor:@thang.scaleFactor or 1}, 2000, createjs.Ease.elasticOut)
-      @targetScaleFactor = @thang.scaleFactor
+      @targetScaleFactor = @thang.scaleFactor or 1
 
   updateAlpha: ->
     @imageObject.alpha = if @hiding then 0 else 1
@@ -336,7 +340,7 @@ module.exports = CocoSprite = class CocoSprite extends CocoClass
       @warnedFor ?= {}
       console.warn 'Cannot show action', action, 'for', @thangType.get('name'), 'because it DNE' unless @warnedFor[action]
       @warnedFor[action] = true
-      return null
+      return if @action is 'idle' then null else 'idle'
     action = 'break' if @actions.break? and @thang?.erroredOut
     action = 'die' if @actions.die? and thang?.health? and thang.health <= 0
     @actions[action]
@@ -494,6 +498,7 @@ module.exports = CocoSprite = class CocoSprite extends CocoClass
 
   updateEffectMarks: ->
     return if _.isEqual @thang.effectNames, @previousEffectNames
+    return if @stopped
     for effect in @thang.effectNames
       mark = @addMark effect, @options.floatingLayer, effect
       mark.statusEffect = true
