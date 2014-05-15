@@ -20,7 +20,6 @@ module.exports = class SpriteBoss extends CocoClass
     'level-lock-select': 'onSetLockSelect'
     'level:restarted': 'onLevelRestarted'
     'god:new-world-created': 'onNewWorld'
-    'tome:cast-spells': 'onCastSpells'
     'camera:dragged': 'onCameraDragged'
     'sprite:loaded': -> @update(true)
 
@@ -48,7 +47,7 @@ module.exports = class SpriteBoss extends CocoClass
   toString: -> "<SpriteBoss: #{@spriteArray.length} sprites>"
 
   thangTypeFor: (type) ->
-    _.find @options.thangTypes, (m) -> m.get('original') is type or m.get('name') is type
+    _.find @options.thangTypes, (m) -> m.get('actions') and m.get('original') is type or m.get('name') is type
 
   createLayers: ->
     @spriteLayers = {}
@@ -145,7 +144,11 @@ module.exports = class SpriteBoss extends CocoClass
 
   addThangToSprites: (thang, layer=null) ->
     return console.warn 'Tried to add Thang to the surface it already has:', thang.id if @sprites[thang.id]
-    thangType = _.find @options.thangTypes, (m) -> m.get('name') is thang.spriteName
+    thangType = _.find @options.thangTypes, (m) ->
+      return false unless m.get('actions') or m.get('raster')
+      return m.get('name') is thang.spriteName
+    thangType ?= _.find @options.thangTypes, (m) -> return m.get('name') is thang.spriteName
+
     options = @createSpriteOptions thang: thang
     options.resolutionFactor = if thangType.get('kind') is 'Floor' then 2 else 4
     sprite = new CocoSprite thangType, options
@@ -197,6 +200,8 @@ module.exports = class SpriteBoss extends CocoClass
   cache: (update=false) ->
     return if @cached and not update
     wallSprites = (sprite for sprite in @spriteArray when sprite.thangType?.get('name').search(/(dungeon|indoor).wall/i) isnt -1)
+    unless _.all (s.thangType.isFullyLoaded() for s in wallSprites)
+      return 
     walls = (sprite.thang for sprite in wallSprites)
     @world.calculateBounds()
     wallGrid = new Grid walls, @world.size()...
@@ -216,9 +221,6 @@ module.exports = class SpriteBoss extends CocoClass
 
   onNewWorld: (e) ->
     @world = @options.world = e.world
-    @play()
-
-  onCastSpells: -> @stop()
 
   play: ->
     sprite.play() for sprite in @spriteArray
@@ -262,9 +264,9 @@ module.exports = class SpriteBoss extends CocoClass
   selectSprite: (e, sprite=null, spellName=null, treemaThangSelected = null) ->
     return if e and (@disabled or @selectLocked)  # Ignore clicks for selection/panning/wizard movement while disabled or select is locked
     worldPos = sprite?.thang?.pos
-    worldPos ?= @camera.canvasToWorld {x: e.originalEvent.rawX, y: e.originalEvent.rawY} if e
+    worldPos ?= @camera.screenToWorld {x: e.originalEvent.rawX, y: e.originalEvent.rawY} if e
     if worldPos and (@options.navigateToSelection or not sprite or treemaThangSelected)
-      @camera.zoomTo(sprite?.displayObject or @camera.worldToSurface(worldPos), @camera.zoom, 1000)
+      @camera.zoomTo(sprite?.displayObject or @camera.worldToSurface(worldPos), @camera.zoom, 1000, true)
     sprite = null if @options.choosing  # Don't select sprites while choosing
     if sprite isnt @selectedSprite
       @selectedSprite?.selected = false

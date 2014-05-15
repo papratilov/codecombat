@@ -2,7 +2,10 @@ SuperModel = require 'models/SuperModel'
 CocoClass = require 'lib/CocoClass'
 LevelLoader = require 'lib/LevelLoader'
 GoalManager = require 'lib/world/GoalManager'
-God = require 'lib/Buddha'
+God = require 'lib/God'
+
+Aether.addGlobal 'Vector', require 'lib/world/vector'
+Aether.addGlobal '_', _
 
 module.exports = class Simulator extends CocoClass
 
@@ -13,11 +16,12 @@ module.exports = class Simulator extends CocoClass
     @retryDelayInSeconds = 10
     @taskURL = '/queue/scoring'
     @simulatedByYou = 0
-    @god = new God maxWorkerPoolSize: 1, maxAngels: 1, workerCode: @options.workerCode  # Start loading worker.
+    @god = new God maxAngels: 1, workerCode: @options.workerCode, headless: true  # Start loading worker.
 
   destroy: ->
     @off()
     @cleanupSimulation()
+    @god?.destroy()
     super()
 
   fetchAndSimulateTask: =>
@@ -37,6 +41,7 @@ module.exports = class Simulator extends CocoClass
     $.ajax
       url: @taskURL
       type: "GET"
+      parse: true
       error: @handleFetchTaskError
       success: @setupSimulationAndLoadLevel
 
@@ -69,7 +74,7 @@ module.exports = class Simulator extends CocoClass
       return
 
     @supermodel ?= new SuperModel()
-
+    @supermodel.resetProgress()
     @levelLoader = new LevelLoader supermodel: @supermodel, levelID: levelID, sessionID: @task.getFirstSessionID(), headless: true
     if @supermodel.finished()
       @simulateGame()
@@ -91,27 +96,20 @@ module.exports = class Simulator extends CocoClass
       @simulateAnotherTaskAfterDelay()
 
   assignWorldAndLevelFromLevelLoaderAndDestroyIt: ->
-    console.log "Assigning world and level"
     @world = @levelLoader.world
     @level = @levelLoader.level
     @levelLoader.destroy()
     @levelLoader = null
 
   setupGod: ->
-    @god.level = @level.serialize @supermodel
+    @god.setLevel @level.serialize @supermodel
     @god.setWorldClassMap @world.classMap
-    @setupGoalManager()
-    @setupGodSpells()
-
-
-  setupGoalManager: ->
     @god.setGoalManager new GoalManager(@world, @level.get 'goals')
-
 
   commenceSimulationAndSetupCallback: ->
     @god.createWorld @generateSpellsObject()
     Backbone.Mediator.subscribeOnce 'god:infinite-loop', @onInfiniteLoop, @
-    Backbone.Mediator.subscribeOnce 'god:new-world-created', @processResults, @
+    Backbone.Mediator.subscribeOnce 'god:goals-calculated', @processResults, @
 
     #Search for leaks, headless-client only.
     if @options.headlessClient and @options.leakTest and not @memwatch?
@@ -137,7 +135,6 @@ module.exports = class Simulator extends CocoClass
                 process.exit()
               @hd = new @memwatch.HeapDiff()
 
-
   onInfiniteLoop: ->
     console.warn "Skipping infinitely looping game."
     @trigger 'statusUpdate', "Infinite loop detected; grabbing a new game in #{@retryDelayInSeconds} seconds."
@@ -147,9 +144,9 @@ module.exports = class Simulator extends CocoClass
     taskResults = @formTaskResultsObject simulationResults
     @sendResultsBackToServer taskResults
 
-  sendResultsBackToServer: (results) =>
+  sendResultsBackToServer: (results) ->
     @trigger 'statusUpdate', 'Simulation completed, sending results back to server!'
-    console.log "Sending result back to server!"
+    console.log "Sending result back to server!", results
 
     if @options.headlessClient and @options.testing
       return @fetchAndSimulateTask()
@@ -158,6 +155,7 @@ module.exports = class Simulator extends CocoClass
       url: "/queue/scoring"
       data: results
       type: "PUT"
+      parse: true
       success: @handleTaskResultsTransferSuccess
       error: @handleTaskResultsTransferError
       complete: @cleanupAndSimulateAnotherTask
@@ -180,8 +178,6 @@ module.exports = class Simulator extends CocoClass
     @fetchAndSimulateTask()
 
   cleanupSimulation: ->
-    @god?.destroy()
-    @god = null
     @world = null
     @level = null
 
@@ -224,16 +220,13 @@ module.exports = class Simulator extends CocoClass
     else
       return 1
 
-  setupGodSpells: ->
-    @generateSpellsObject()
-    @god.spells = @spells
-
   generateSpellsObject: ->
     @currentUserCodeMap = @task.generateSpellKeyToSourceMap()
     @spells = {}
     for thang in @level.attributes.thangs
       continue if @thangIsATemplate thang
       @generateSpellKeyToSourceMapPropertiesFromThang thang
+    @spells
 
   thangIsATemplate: (thang) ->
     for component in thang.components
@@ -263,7 +256,6 @@ module.exports = class Simulator extends CocoClass
     spellKey = spellKeyComponents.join '/'
     spellKey
 
-
   createSpellAndAssignName: (spellKey, spellName) ->
     @spells[spellKey] ?= {}
     @spells[spellKey].name = spellName
@@ -277,7 +269,8 @@ module.exports = class Simulator extends CocoClass
     if spellTeam not in playerTeams then useProtectAPI = false
     @spells[spellKey].thangs[thang.id].aether = @createAether @spells[spellKey].name, method, useProtectAPI
 
-  transpileSpell: (thang, spellKey, methodName) ->
+  transpileSpell: (thang, spellKey, methodName) -> 
+
     slugifiedThangID = _.string.slugify thang.id
     source = @currentUserCodeMap[[slugifiedThangID,methodName].join '/'] ? ""
     aether = @spells[spellKey].thangs[thang.id].aether
@@ -292,8 +285,8 @@ module.exports = class Simulator extends CocoClass
       functionName: methodName
       protectAPI: useProtectAPI
       includeFlow: false
-      requiresThis: true
-      yieldConditionally: false
+      yieldConditionally: methodName is "plan"
+      globals: ['Vector', '_']
       problems:
         jshint_W040: {level: "ignore"}
         jshint_W030: {level: "ignore"}  # aether_NoEffect instead
@@ -304,9 +297,9 @@ module.exports = class Simulator extends CocoClass
     #console.log "creating aether with options", aetherOptions
     return new Aether aetherOptions
 
+
 class SimulationTask
   constructor: (@rawData) ->
-    console.log 'Simulating sessions', (session for session in @getSessions())
     @spellKeyToTeamMap = {}
 
   getLevelName: ->

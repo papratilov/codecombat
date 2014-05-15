@@ -81,7 +81,7 @@ module.exports = class Mark extends CocoClass
     shape.graphics.endStroke()
     shape.graphics.endFill()
 
-    text = new createjs.Text "" + index, "40px Arial", color.replace('0.5', '1')
+    text = new createjs.Text "" + index, "20px Arial", color.replace('0.5', '1')
     text.regX = text.getMeasuredWidth() / 2
     text.regY = text.getMeasuredHeight() / 2
     text.shadow = new createjs.Shadow("#000000", 1, 1, 0)
@@ -200,7 +200,7 @@ module.exports = class Mark extends CocoClass
     Backbone.Mediator.publish 'sprite:loaded'
 
   update: (pos=null) ->
-    return false unless @on and @mark
+    return false unless @on and @mark and @sprite?.thangType.isFullyLoaded()
     @mark.visible = not @hidden
     @updatePosition pos
     @updateRotation()
@@ -242,10 +242,11 @@ module.exports = class Mark extends CocoClass
       oldMark.parent.removeChild oldMark
     return unless @name in ["selection", "target", "repair", "highlight"]
     scale = 0.5
-    if @sprite
+    if @sprite?.imageObject
       size = @sprite.getAverageDimension()
       size += 60 if @name is 'selection'
       size += 60 if @name is 'repair'
+      size *= @sprite.scaleFactor
       scale = size / {selection: 128, target: 128, repair: 320, highlight: 160}[@name]
       if @sprite?.thang.spriteName.search(/(dungeon|indoor).wall/i) isnt -1
         scale *= 2

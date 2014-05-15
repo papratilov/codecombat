@@ -108,7 +108,11 @@ _.extend LevelSessionSchema.properties,
       additionalProperties:
         type: 'string'
         format: 'javascript'
-
+  
+  codeLanguage:
+    type: 'string'
+    default: 'javascript'
+    
   teamSpells:
     type: 'object'
     additionalProperties:
@@ -142,7 +146,17 @@ _.extend LevelSessionSchema.properties,
       type: 'object'
       additionalProperties:
         type: 'string'
-        format: 'javascript'
+
+  submittedCodeLanguage:
+    type: 'string'
+    default: 'javascript'
+    
+  transpiledCode:
+    type: 'object'
+    additionalProperties:
+      type: 'object'
+      additionalProperties:
+        type: 'string'
 
   isRanking:
     type: 'boolean'

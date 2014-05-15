@@ -120,8 +120,7 @@ module.exports = class TomeView extends View
         @thangSpells[thang.id].push spellKey
         unless method.cloneOf
           skipProtectAPI = @getQueryVariable "skip_protect_api", (@options.levelID in ['gridmancer'])
-          skipFlow = @getQueryVariable "skip_flow", (@options.levelID in ['brawlwood', 'greed', 'gold-rush'])
-          spell = @spells[spellKey] = new Spell programmableMethod: method, spellKey: spellKey, pathComponents: pathPrefixComponents.concat(pathComponents), session: @options.session, supermodel: @supermodel, skipFlow: skipFlow, skipProtectAPI: skipProtectAPI, worker: @worker
+          spell = @spells[spellKey] = new Spell programmableMethod: method, spellKey: spellKey, pathComponents: pathPrefixComponents.concat(pathComponents), session: @options.session, supermodel: @supermodel, skipProtectAPI: skipProtectAPI, worker: @worker
     for thangID, spellKeys of @thangSpells
       thang = world.getThangByID thangID
       if thang
@@ -139,19 +138,10 @@ module.exports = class TomeView extends View
   onCastSpell: (e) ->
     # A single spell is cast.
     # Hmm; do we need to make sure other spells are all cast here?
-    @cast()
+    @cast e?.preload
 
-  cast: ->
-    if @options.levelID is 'brawlwood'
-      # For performance reasons, only includeFlow on the currently Thang.
-      for spellKey, spell of @spells
-        for thangID, spellThang of spell.thangs
-          hadFlow = Boolean spellThang.aether.options.includeFlow
-          willHaveFlow = spellThang is @spellView?.spellThang
-          spellThang.aether.options.includeFlow = spellThang.aether.originalOptions.includeFlow = willHaveFlow
-          spellThang.aether.transpile spell.source unless hadFlow is willHaveFlow
-          #console.log "set includeFlow to", spellThang.aether.options.includeFlow, "for", thangID, "of", spellKey
-    Backbone.Mediator.publish 'tome:cast-spells', spells: @spells
+  cast: (preload=false) ->
+    Backbone.Mediator.publish 'tome:cast-spells', spells: @spells, preload: preload
 
   onToggleSpellList: (e) ->
     @spellList.rerenderEntries()
@@ -215,7 +205,7 @@ module.exports = class TomeView extends View
 
   reloadAllCode: ->
     spell.view.reloadCode false for spellKey, spell of @spells when spell.team is me.team or (spell.team in ["common", "neutral", null])
-    Backbone.Mediator.publish 'tome:cast-spells', spells: @spells
+    Backbone.Mediator.publish 'tome:cast-spells', spells: @spells, preload: false
 
   updateLanguageForAllSpells: ->
     spell.updateLanguageAether() for spellKey, spell of @spells

@@ -174,7 +174,7 @@ module.exports = class MyMatchesTabView extends CocoView
     button = $(e.target).closest('.rank-button')
     sessionID = button.data('session-id')
     session = _.find @sessions.models, {id: sessionID}
-    return unless @readyToRank(session)
+    return unless session.readyToRank()
 
     @setRankingButtonText(button, 'submitting')
     success = =>
@@ -182,14 +182,43 @@ module.exports = class MyMatchesTabView extends CocoView
     failure = (jqxhr, textStatus, errorThrown) =>
       console.log jqxhr.responseText
       @setRankingButtonText(button, 'failed')
+    transpiledCode = @transpileSession session
 
-    ajaxData = {session: sessionID, levelID: @level.id, originalLevelID: @level.attributes.original, levelMajorVersion: @level.attributes.version.major}
+    ajaxData =
+      session: sessionID
+      levelID: @level.id
+      originalLevelID: @level.attributes.original
+      levelMajorVersion: @level.attributes.version.major
+      transpiledCode: transpiledCode
+
     $.ajax '/queue/scoring', {
       type: 'POST'
       data: ajaxData
       success: success
       error: failure
     }
+
+  transpileSession: (session) ->
+    submittedCode = session.get('code')
+    transpiledCode = {}
+    for thang, spells of submittedCode
+      transpiledCode[thang] = {}
+      for spellID, spell of spells
+        #DRY this
+        aetherOptions =
+          problems: {}
+          language: "javascript"
+          functionName: spellID
+          functionParameters: []
+          yieldConditionally: spellID is "plan"
+          globals: ['Vector', '_']
+          protectAPI: true
+          includeFlow: false
+        if spellID is "hear" then aetherOptions["functionParameters"] = ["speaker","message","data"]
+
+        aether = new Aether aetherOptions
+        transpiledCode[thang][spellID] = aether.transpile spell
+    transpiledCode
 
   setRankingButtonText: (rankButton, spanClass) ->
     rankButton.find('span').addClass('hidden')

@@ -28,7 +28,7 @@ class CocoModel extends Backbone.Model
     clone = super()
     clone.set($.extend(true, {}, if withChanges then @attributes else @_revertAttributes))
     clone
-    
+
   onError: ->
     @loading = false
 
@@ -37,6 +37,8 @@ class CocoModel extends Backbone.Model
     @loading = false
     @markToRevert()
     @loadFromBackup()
+    
+  getNormalizedURL: -> "#{@urlRoot}/#{@id}"
 
   set: ->
     res = super(arguments...)
@@ -76,9 +78,9 @@ class CocoModel extends Backbone.Model
     return super attrs, options
 
   fetch: ->
-    res = super(arguments...)
+    @jqxhr = super(arguments...)
     @loading = true
-    res
+    @jqxhr
 
   markToRevert: ->
     if @type() is 'ThangType'
@@ -162,6 +164,10 @@ class CocoModel extends Backbone.Model
   getDelta: ->
     differ = deltasLib.makeJSONDiffer()
     differ.diff @_revertAttributes, @attributes
+    
+  getDeltaWith: (otherModel) ->
+    differ = deltasLib.makeJSONDiffer()
+    differ.diff @attributes, otherModel.attributes
 
   applyDelta: (delta) ->
     newAttributes = $.extend(true, {}, @attributes)
@@ -172,13 +178,17 @@ class CocoModel extends Backbone.Model
     delta = @getDelta()
     deltasLib.expandDelta(delta, @_revertAttributes, @schema())
 
+  getExpandedDeltaWith: (otherModel) ->
+    delta = @getDeltaWith(otherModel)
+    deltasLib.expandDelta(delta, @attributes, @schema())
+
   watch: (doWatch=true) ->
     $.ajax("#{@urlRoot}/#{@id}/watch", {type:'PUT', data:{on:doWatch}})
     @watching = -> doWatch
 
   watching: ->
     return me.id in (@get('watchers') or [])
-    
+
   populateI18N: (data, schema, path='') ->
     # TODO: Better schema/json walking
     sum = 0
@@ -187,7 +197,7 @@ class CocoModel extends Backbone.Model
     if schema.properties?.i18n and _.isPlainObject(data) and not data.i18n?
       data.i18n = {}
       sum += 1
-      
+
     if _.isPlainObject data
       for key, value of data
         numChanged = 0
@@ -195,10 +205,10 @@ class CocoModel extends Backbone.Model
         if numChanged and not path # should only do this for the root object
           @set key, value
         sum += numChanged
-          
+
     if schema.items and _.isArray data
       sum += @populateI18N(value, schema.items, path+'/'+index) for value, index in data
-    
+
     sum
 
   @getReferencedModel: (data, schema) ->
@@ -229,13 +239,13 @@ class CocoModel extends Backbone.Model
     model = new Model()
     model.url = makeUrlFunc(link)
     return model
-    
+
   setURL: (url) ->
     makeURLFunc = (u) -> -> u
     @url = makeURLFunc(url)
     @
-    
+
   getURL: ->
     return if _.isString @url then @url else @url()
-    
+
 module.exports = CocoModel
